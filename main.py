@@ -1,6 +1,9 @@
-import nest_asyncio
 import asyncio
 import logging
+import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -10,7 +13,7 @@ from telegram.ext import (
 )
 from src.config import settings
 from src.handlers.dispatcher import dispatch_message, dispatch_callback, dispatch_voice
-from src.database import close_connections
+from src.database import get_db, close_connections
 
 logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -18,29 +21,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-nest_asyncio.apply()
+
+# ─── Health-check server (Render requires an open port) ───────────────────
+class HealthCheck(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+    def log_message(self, *args):
+        pass
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 8000))
+    HTTPServer(("0.0.0.0", port), HealthCheck).serve_forever()
 
 
+# ─── App builder ──────────────────────────────────────────────────────────
 def build_app() -> Application:
-    app = Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(settings.TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)   # ← async init goes here, not in main()
+        .build()
+    )
 
-    # Commands
     app.add_handler(CommandHandler("start", dispatch_message))
     app.add_handler(CommandHandler("help",  dispatch_message))
     app.add_handler(CommandHandler("menu",  dispatch_message))
 
-    # Text messages
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, dispatch_message))
-
-    # Voice messages
     app.add_handler(MessageHandler(filters.VOICE, dispatch_voice))
-
-    # Inline keyboard callbacks
     app.add_handler(CallbackQueryHandler(dispatch_callback))
 
     return app
 
 
+# ─── post_init: runs inside PTB's own event loop ──────────────────────────
 async def post_init(app: Application):
     await app.bot.set_my_commands([
         ("start", "Start / Restart AgroLink"),
@@ -50,18 +67,22 @@ async def post_init(app: Application):
     logger.info(f"✅ {settings.BOT_NAME} bot is running!")
 
 
-async def main():
+# ─── Synchronous entry point ──────────────────────────────────────────────
+def main():
+    threading.Thread(target=start_health_server, daemon=True).start()
+
     app = build_app()
-    app.post_init = post_init
 
     logger.info("Starting AgroLink Telegram bot in polling mode...")
-    await app.run_polling(drop_pending_updates=True)
+    app.run_polling(drop_pending_updates=True)   # synchronous, no await
 
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        main()
+    except Exception as e:
+        logger.error(f"Bot crashed: {e}", exc_info=True)
     except KeyboardInterrupt:
         logger.info("Bot stopped.")
     finally:
-        asyncio.run(close_connections())
+        close_connections()

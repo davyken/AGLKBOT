@@ -7,7 +7,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_WHISPER_MODEL: str = "whisper-1"
-    MONGODB_URI: str = "mongodb://localhost:27017/agro-link"
+    MONGODB_URI: str = ""
+    DATABASE_URL: str = ""
     BACKEND_URL: str = ""
 
     BOT_NAME: str = "Amara"

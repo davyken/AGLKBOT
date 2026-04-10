@@ -9,7 +9,8 @@ _mongo_client: AsyncIOMotorClient | None = None
 async def get_db():
     global _mongo_client
     if _mongo_client is None:
-        _mongo_client = AsyncIOMotorClient(settings.MONGODB_URI)
+        mongo_uri = settings.MONGODB_URI or settings.DATABASE_URL
+        _mongo_client = AsyncIOMotorClient(mongo_uri)
     return _mongo_client["agro-link"]
 
 
@@ -22,8 +23,9 @@ async def get_sessions_collection(db):
 
 
 
-async def close_connections():
+def close_connections():
     global _mongo_client
     if _mongo_client:
         _mongo_client.close()
+        _mongo_client = None
 
