@@ -1,0 +1,1 @@
+- [x] 1. Add nest_asyncio to requirements.txt
