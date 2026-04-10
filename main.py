@@ -71,6 +71,9 @@ async def post_init(app: Application):
 def main():
     threading.Thread(target=start_health_server, daemon=True).start()
 
+    # Python 3.10+ no longer auto-creates an event loop — set one explicitly
+    asyncio.set_event_loop(asyncio.new_event_loop())
+
     app = build_app()
 
     logger.info("Starting AgroLink Telegram bot in polling mode...")
